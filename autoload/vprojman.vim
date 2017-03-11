@@ -181,7 +181,11 @@ fun vprojman#patch()
   execute "cd " . orig_cwd
 
   if confirm("Reload files?", "&yes\n&no") == 1
-    bufdo e
+    try
+      bufdo e
+    catch /No file name/
+      " TODO test for this case (no file buffers) before prompting
+    endtry
   endif
 endfun
 
