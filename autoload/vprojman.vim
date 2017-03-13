@@ -84,7 +84,9 @@ func s:save_session()
   let ss = [ '" ' . g:vprojman_signature . "" ]
 
   for var in s:session_vars
-    execute "call add(ss, 'let ' . var . ' = " . '"' . "' . " . var . " . '" . '"' . "')"
+    if exists(var)
+      execute "call add(ss, 'let ' . var . ' = " . '"' . "' . " . var . " . '" . '"' . "')"
+    endif
   endfor
 
   call writefile(ss, s:proj_root . "/" . g:vprojman_sessionfile)
@@ -195,7 +197,7 @@ fun vprojman#patch()
   let patchaction = patchactionlist[choice - 1]
 
   if patchaction == ""
-    echo "Invalid patch selected"
+    echom "Invalid patch selected"
     execute "cd " . orig_cwd
     return
   endif
@@ -251,16 +253,23 @@ endfunc
 func vprojman#sessionvar(var)
 
   if !exists(a:var)
-    echom ("Cannot make '" . a:var . "' a session variable. It is undefined.")
-    return
+    try
+      execute "let " . a:var . " = ''"
+      if a:var[0] != "$" " Oddly, vim cannot unlet a env var
+        execute "unlet! " . a:var
+      endif
+    catch /Invalid expression/
+      echom ("Cannot make '" . a:var . "' a session variable. It is invalid.")
+      return
+    endtry
+  else
+    try
+      execute "let " . a:var . " = " . a:var
+    catch /Invalid expression/
+      echom ("Cannot make '" . a:var . "' a session variable. It is invalid.")
+      return
+    endtry
   endif
-
-  try
-    execute "let " . a:var . " = " . a:var
-  catch /Invalid expression/
-    echom ("Cannot make '" . a:var . "' a session variable. It is invalid.")
-    return
-  endtry
 
   call add(s:session_vars, a:var)
 
