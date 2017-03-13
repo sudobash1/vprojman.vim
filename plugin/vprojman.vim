@@ -27,6 +27,9 @@ endif
 if !exists("g:vprojman_projfile")
   let g:vprojman_projfile = "proj.vim"
 endif
+if !exists("g:vprojman_sessionfile")
+  let g:vprojman_sessionfile = "proj.session.vim"
+endif
 
 if !exists("g:vprojman_patches_dir")
   let g:vprojman_patches_dir = g:vprojman_projfile . "_patches"

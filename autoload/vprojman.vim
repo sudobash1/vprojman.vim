@@ -8,8 +8,12 @@ if exists("g:loaded_vprojman_autoload")
 endif
 let g:loaded_vprojman_autoload = 1
 
+augroup vprojman
+
 " SECTION: private variables {{{
 let s:proj_root = ""
+let s:setup_exit_hook = 0
+let s:session_vars = []
 " }}}
 
 " SECTION: helper functions {{{
@@ -22,43 +26,69 @@ func s:check_init()
   return 1
 endfun
 
+function s:do_source(file)
+  let do_source = 0
+
+  if ! filereadable(a:file)
+    return 0
+  endif
+
+  try
+    execute "silent vimgrep /" . g:vprojman_signature . "/j " . a:file
+    cexpr []
+    let do_source = 1
+  catch /No match/
+    " Ask the user if they trust it.
+    let s = confirm("UNSIGNED " . a:file . " file found. Source it?", "&yes\n&no", 2)
+    let do_source = s == 1
+  endtry
+
+  if do_source
+    execute "source " . a:file
+  endif
+
+  return do_source
+endfunc
+
 function s:init_projconf()
   let orig_cwd = getcwd()
   let found_proj = 0
   while getcwd() != expand("~") && getcwd() != "/"
 
-    if filereadable(g:vprojman_projfile)
+    if s:do_source(fnamemodify(g:vprojman_projfile, ":p"))
 
-      try
-        execute "silent vimgrep /" . g:vprojman_signature . "/j proj.vim"
-        cexpr []
-        let found_proj = 1
-      catch /No match/
-        " Ask the user if they trust it.
-        let proj = fnamemodify(g:vprojman_projfile, ":p")
-        let source = confirm("UNSIGNED " . proj . " file found. Source it?", "&yes\n&no", 2)
-        if source == 1
-          let found_proj = 1
-        endif
-      endtry
+      let s:proj_root = getcwd()
 
-      if found_proj
-        execute "source " . g:vprojman_projfile
-        let s:proj_root = getcwd()
-
-        if ! g:vprojman_changedir
-          execute "cd " . orig_cwd
-        endif
-
-        return
+      if ! g:vprojman_changedir
+        execute "cd " . orig_cwd
       endif
 
+      call s:do_source(fnamemodify(g:vprojman_sessionfile, ":p"))
+
+      return
     endif
+
     cd ..
   endwhile
+
   " No proj.vim file found / sourced
   execute "cd " . orig_cwd
   let s:proj_root = getcwd()
+endfunc
+
+"TODO make this still work with variables containing \n and '
+func s:save_session()
+
+  if s:proj_root == "" | return | endif
+
+  let ss = [ '" ' . g:vprojman_signature . "" ]
+
+  for var in s:session_vars
+    execute "call add(ss, 'let ' . var . ' = " . '"' . "' . " . var . " . '" . '"' . "')"
+  endfor
+
+  call writefile(ss, s:proj_root . "/" . g:vprojman_sessionfile)
+
 endfunc
 
 func s:choice(prompt, default, choices)
@@ -218,6 +248,31 @@ func vprojman#make(...)
   execute "cd " . orig_cwd
 endfunc
 
+func vprojman#sessionvar(var)
+
+  if !exists(a:var)
+    echom ("Cannot make '" . a:var . "' a session variable. It is undefined.")
+    return
+  endif
+
+  try
+    execute "let " . a:var . " = " . a:var
+  catch /Invalid expression/
+    echom ("Cannot make '" . a:var . "' a session variable. It is invalid.")
+    return
+  endtry
+
+  call add(s:session_vars, a:var)
+
+  if ! s:setup_exit_hook
+    autocmd vprojman VimLeavePre * call <SID>save_session()
+    let s:setup_exit_hook = 1
+  endif
+
+endfunc
+
 "}}}
+
+augroup END
 
 " vim:ft=vim:fdm=marker
